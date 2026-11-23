@@ -26,7 +26,7 @@ Speeds and temperatures follow the app's **Units** setting (km/h and °C, or mph
 The app installs from the MGU Store on the car, which builds it from this repository. The Store itself needs root
 SSH access to the head unit; see [its guide](https://github.com/robertnisipeanu/mgu-store).
 
-1. In the Store: Settings, then **Add source**, type `p0nyque/mgu-f-series-cluster` and pick the branch `main`.
+1. In the Store: Settings, then **Add source**, type `p0nyque/mgu-custom-obd-indicators` and pick the branch `main`.
 2. Open **F-Series Cluster** and press **Install**. The car builds it, which can take a few minutes.
 3. Restart the head unit if the Store asks.
 4. Open the app's page under Apps and check that **Theme** is **F-series analogue (F10 / F15)**.
