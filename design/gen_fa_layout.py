@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the F-series analogue layout (apps/apex_dash/hud/layouts/f_analog.json).
+"""Write the F-series analogue layout (apps/f_series_cluster/hud/layouts/f_analog.json).
 
     python3 design/gen_fa_layout.py
 
@@ -19,8 +19,8 @@ import json, math, os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, '..')
-OUT = os.path.join(ROOT, 'apps', 'apex_dash', 'hud', 'layouts')
-FONTS = os.path.join(ROOT, 'apps', 'apex_dash', 'hud', 'fonts')
+OUT = os.path.join(ROOT, 'apps', 'f_series_cluster', 'hud', 'layouts')
+FONTS = os.path.join(ROOT, 'apps', 'f_series_cluster', 'hud', 'fonts')
 
 TACH = (1501, 380, 262)                     # centred on BMW's gear box (1501.5, 380.5)
 SPD = (1920 - TACH[0], TACH[1], TACH[2])    # (419, 380)

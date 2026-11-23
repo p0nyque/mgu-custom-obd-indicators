@@ -1,5 +1,5 @@
-Cluster Themes - third-party notices
-=====================================
+F-Series Cluster - third-party notices
+======================================
 
 The app's own code is MIT, Copyright (c) 2026 bimmer-lab (LICENSE in the repository).
 Besides its own code, the app ships with:
@@ -28,6 +28,10 @@ Besides its own code, the app ships with:
 6. The atlas-text shader in shaders.js (atext: glyph codes in a uniform array picking cells of a glyph atlas
    asset) is after js/showcase.js (TEXT_FS) of https://github.com/robertnisipeanu/idrive-apps (native/cluster-render):
    Mozilla Public License 2.0, Copyright (C) 2026 Robert Nisipeanu.
+
+7. The E39 M5 layouts (e39_*.json), their shaders (e39dash, e39needles in shaders.js) and start-up
+   sequence are Marko DEV's, from https://github.com/markoni1408/mgu-e39-m5-cluster (MIT), which this
+   app was forked from.
 
 ----------------------------------------------------------------------------------------------
 Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)

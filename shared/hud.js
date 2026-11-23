@@ -1113,7 +1113,7 @@ class HudApp {
     /** Local time. config.utcOffsetMinutes overrides the unit's own time zone if that turns out wrong on the car. */
     _now() {
         let off = this.config.utcOffsetMinutes;
-        const tz = this.setting('utcOffset');   // optional "Clock time zone" setting (Apex Dash); 'auto' or missing = unit clock
+        const tz = this.setting('utcOffset');   // optional "Clock time zone" setting (F-Series Cluster); 'auto' or missing = unit clock
         if (tz !== undefined && tz !== null && tz !== 'auto' && isNum(Number(tz))) off = Number(tz);
         if (!isNum(off)) return new Date();
         const d = new Date(Date.now() + off * 60000);

@@ -66,7 +66,7 @@ CLUSTER_FONTS = [
     ('s_label', 'BarlowSemiCondensed-SemiBold.ttf', 30, UPPER + DIGITS + ' .'),
     ('s_gl', 'Michroma-Regular.ttf', 21, DIGITS + '/', 1),
 ]
-# F30 (Apex Dash, layouts f30_*.json): the 2017 F-series multifunction instrument display (option 6WB). BMW's
+# F30 (F-Series Cluster, layouts f30_*.json): the 2017 F-series multifunction instrument display (option 6WB). BMW's
 # numerals there are a medium-weight semi-condensed sans; Barlow Semi Condensed is the close OFL stand-in.
 # Baked on this Mac with tools/bake_font_mac.swift (CoreText, the same metrics rules) where Pillow is missing.
 F30_FONTS = [
@@ -84,7 +84,7 @@ FA_FONTS = [
     ('fa_tach', 'BarlowSemiCondensed-SemiBold.ttf', 54, DIGITS),                    # analogue: rev numbers
     ('fa_small', 'BarlowSemiCondensed-Medium.ttf', 20, DIGITS + '/°CF'),            # analogue: fuel and oil marks
 ]
-FONTS = {'idrive_hud_widgets': HUD_FONTS, 'cluster_themes': CLUSTER_FONTS, 'apex_dash': F30_FONTS + FA_FONTS}
+FONTS = {'idrive_hud_widgets': HUD_FONTS, 'cluster_themes': CLUSTER_FONTS, 'f_series_cluster': F30_FONTS + FA_FONTS}
 PAD = 2
 ATLAS_W = 1024
 

@@ -1,5 +1,5 @@
 import json
-OUT='apps/apex_dash/hud/layouts/'
+OUT='apps/f_series_cluster/hud/layouts/'
 def T(id,x,y,w,h,text,font,color=None,align=None,**kw):
     d={'id':id,'type':'text','z':5,'x':x,'y':y,'w':w,'h':h,'text':text,'font':font}
     if color: d['color']=color

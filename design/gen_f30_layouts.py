@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the F30 layouts (apps/apex_dash/hud/layouts/f30_comfort.json, f30_sport.json, f30_eco.json).
+"""Write the F30 layouts (apps/f_series_cluster/hud/layouts/f30_comfort.json, f30_sport.json, f30_eco.json).
 
     python3 design/gen_f30_layouts.py
 
@@ -17,8 +17,8 @@ import json, math, os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, '..')
-OUT = os.path.join(ROOT, 'apps', 'apex_dash', 'hud', 'layouts')
-FONTS = os.path.join(ROOT, 'apps', 'apex_dash', 'hud', 'fonts')
+OUT = os.path.join(ROOT, 'apps', 'f_series_cluster', 'hud', 'layouts')
+FONTS = os.path.join(ROOT, 'apps', 'f_series_cluster', 'hud', 'fonts')
 
 BOX = (1406, 342, 1597, 419)
 TACH = (1501, 380, 262)                                                      # centred on the box (1501.5, 380.5)

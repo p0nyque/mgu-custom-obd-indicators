@@ -47,7 +47,7 @@ const THEMES = {
         bg: [0, 0, 0, 255], panel: [0, 0, 0, 255], line: [205, 208, 214, 255], head: [226, 228, 232, 255],
         ink: [12, 12, 14, 255], accent: [255, 196, 0, 255], well: [0, 0, 0, 255], wellLine: [70, 74, 80, 255],
     },
-    // Apex Dash themes (apps/apex_dash): black with one bright accent. Same roles as gt3 (the cluster is an LCD: black is solid).
+    // E39 themes (apps/f_series_cluster, after Marko DEV's Apex Dash): black with one bright accent. Same roles as gt3 (the cluster is an LCD: black is solid).
     apex: {
         name: 'Apex',
         fg: [244, 247, 252, 255], dim: [128, 150, 178, 255], track: [255, 255, 255, 30], arc: [64, 196, 255, 255],

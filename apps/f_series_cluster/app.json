@@ -1,11 +1,11 @@
 {
-  "id": "apex_dash",
+  "id": "f_series_cluster",
   "title": "F-Series Cluster",
   "description": "BMW F-series analogue instrument cluster for iDrive 7 and 8 (MGU), lit in BMW orange: fuel, speed, revs and oil temperature dials with a start-up needle sweep, the gear, time, range and outside temperature. Also has the 2017 F30 digital looks (Comfort, Sport, Eco Pro) and Marko DEV's E39 M5 clusters.",
-  "version": "1.3.0",
+  "version": "1.0.0",
   "vendor": "custom",
-  "loggingId": "OAD1",
-  "iconGlyph": "APX",
+  "loggingId": "FSC1",
+  "iconGlyph": "FSC",
   "shared": [
     "hud.js",
     "hud_text.js",
@@ -80,7 +80,7 @@
     {
       "name": "MAIN",
       "kind": "menu",
-      "title": "Apex Dash",
+      "title": "F-Series Cluster",
       "settings": true,
       "items": [
         [
@@ -538,7 +538,7 @@
   ],
   "config": {
     "target": "panel",
-    "statusName": "Apex Dash",
+    "statusName": "F-Series Cluster",
     "socketPath": "/dev/shm/cluster-render/render.sock",
     "location": {
       "lat": 35.2271,
