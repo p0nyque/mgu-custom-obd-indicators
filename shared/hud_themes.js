@@ -149,6 +149,52 @@ const THEMES = {
         ink: [25, 7, 4, 255], accent: [255, 154, 90, 255], well: [0, 0, 0, 255], faint: [255, 120, 60, 90],
         ghost: [255, 80, 30, 36], wm: [255, 140, 50, 20],
     },
+    // F30 (layouts f30_comfort / f30_sport / f30_eco): the 2017 F-series multifunction display, one theme per drive
+    // mode, colours sampled from BMW's 2017 press photos. Faces stay black (the shader draws them). Roles: fg (the
+    // number by the needle, readouts), dim (scale numbers), label (units, captions), faint (OFF, small print),
+    // accent (the mode's name: Sport E-series orange, Eco Pro blue).
+    f30: {
+        name: 'F30 Comfort',
+        fg: [242, 246, 252, 255], dim: [176, 184, 198, 255], track: [255, 255, 255, 30], arc: [214, 48, 60, 255],
+        glow: 0, stripe: false,
+        bar: { low: [214, 48, 60], mid: [214, 48, 60], high: [255, 42, 42], midAt: 'shift' },
+        rev: { from: [214, 48, 60], to: [214, 48, 60] },
+        bg: [0, 0, 0, 255], panel: [0, 0, 0, 255], line: [80, 88, 98, 255], head: [226, 228, 232, 255],
+        ink: [12, 12, 14, 255], accent: [214, 48, 60, 255], well: [0, 0, 0, 255],
+        label: [198, 204, 216, 255], faint: [130, 138, 150, 255],
+    },
+    f30s: {
+        name: 'F30 Sport',
+        fg: [255, 255, 255, 255], dim: [238, 238, 242, 255], track: [255, 255, 255, 30], arc: [214, 60, 0, 255],
+        glow: 0, stripe: false,
+        bar: { low: [214, 60, 0], mid: [214, 60, 0], high: [255, 42, 42], midAt: 'shift' },
+        rev: { from: [214, 60, 0], to: [214, 60, 0] },
+        bg: [0, 0, 0, 255], panel: [0, 0, 0, 255], line: [94, 28, 3, 255], head: [226, 228, 232, 255],
+        ink: [12, 12, 14, 255], accent: [222, 64, 4, 255], well: [0, 0, 0, 255],
+        label: [232, 232, 236, 255], faint: [204, 172, 152, 255],
+    },
+    // F-series analogue (layout f_analog): lit in BMW orange as the clusters are at night, the strip's captions in the
+    // deep E-series orange. Roles: dim (scale numbers), fg (readouts, gear), label (units, small gauges), accent.
+    fa: {
+        name: 'F-series analogue',
+        fg: [248, 96, 16, 255], dim: [236, 78, 8, 255], track: [255, 255, 255, 30], arc: [214, 60, 0, 255],
+        glow: 0, stripe: false,
+        bar: { low: [214, 60, 0], mid: [214, 60, 0], high: [255, 42, 42], midAt: 'shift' },
+        rev: { from: [214, 60, 0], to: [214, 60, 0] },
+        bg: [0, 0, 0, 255], panel: [0, 0, 0, 255], line: [94, 28, 3, 255], head: [226, 228, 232, 255],
+        ink: [12, 12, 14, 255], accent: [214, 60, 0, 255], well: [0, 0, 0, 255],
+        label: [222, 72, 6, 255], faint: [150, 60, 20, 255],
+    },
+    f30e: {
+        name: 'F30 Eco Pro',
+        fg: [236, 244, 255, 255], dim: [182, 204, 236, 255], track: [255, 255, 255, 30], arc: [70, 150, 255, 255],
+        glow: 0, stripe: false,
+        bar: { low: [70, 150, 255], mid: [70, 150, 255], high: [255, 42, 42], midAt: 'shift' },
+        rev: { from: [70, 150, 255], to: [70, 150, 255] },
+        bg: [0, 0, 0, 255], panel: [0, 0, 0, 255], line: [46, 92, 158, 255], head: [226, 228, 232, 255],
+        ink: [12, 12, 14, 255], accent: [80, 160, 255, 255], well: [0, 0, 0, 255],
+        label: [196, 214, 240, 255], faint: [120, 150, 190, 255],
+    },
 };
 // every theme: the shift-point red, used by "hot" (the gear and SHIFT at the shift point, the rev bar past it)
 Object.keys(THEMES).forEach((k) => { THEMES[k].hot = [255, 42, 42, 255]; });

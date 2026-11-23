@@ -66,7 +66,25 @@ CLUSTER_FONTS = [
     ('s_label', 'BarlowSemiCondensed-SemiBold.ttf', 30, UPPER + DIGITS + ' .'),
     ('s_gl', 'Michroma-Regular.ttf', 21, DIGITS + '/', 1),
 ]
-FONTS = {'idrive_hud_widgets': HUD_FONTS, 'cluster_themes': CLUSTER_FONTS}
+# F30 (Apex Dash, layouts f30_*.json): the 2017 F-series multifunction instrument display (option 6WB). BMW's
+# numerals there are a medium-weight semi-condensed sans; Barlow Semi Condensed is the close OFL stand-in.
+# Baked on this Mac with tools/bake_font_mac.swift (CoreText, the same metrics rules) where Pillow is missing.
+F30_FONTS = [
+    ('f30_num', 'BarlowSemiCondensed-Medium.ttf', 34, DIGITS + '-'),                    # dial numbers
+    ('f30_numL', 'BarlowSemiCondensed-SemiBold.ttf', 48, DIGITS),                   # the number by the needle (magnifier)
+    ('f30_unit', 'Barlow-Medium.ttf', 24, LOWER + UPPER + DIGITS + '/ .+-°:'),      # km/h, 1/min x 1000, Time, Temp
+    ('f30_label', 'BarlowSemiCondensed-SemiBold.ttf', 27, UPPER + ' +'),            # READY OFF SPORT ECO PRO CHARGE POWER
+    ('f30_val', 'BarlowSemiCondensed-SemiBold.ttf', 44, DIGITS + ':+-. '),          # 13:50, +6.5, range
+    ('f30_speed', 'BarlowSemiCondensed-SemiBold.ttf', 124, DIGITS + '-'),           # Sport: the digital speed
+    ('f30_spdM', 'BarlowSemiCondensed-SemiBold.ttf', 66, DIGITS + '-'),             # Comfort / Eco Pro: the digital speed
+    ('f30_gear', 'BarlowSemiCondensed-SemiBold.ttf', 48, 'PRNDSM-' + DIGITS),       # the gear in the trapezoid
+]
+FA_FONTS = [
+    ('fa_spd', 'BarlowSemiCondensed-SemiBold.ttf', 35, DIGITS),                     # analogue: speed numbers
+    ('fa_tach', 'BarlowSemiCondensed-SemiBold.ttf', 54, DIGITS),                    # analogue: rev numbers
+    ('fa_small', 'BarlowSemiCondensed-Medium.ttf', 20, DIGITS + '/°CF'),            # analogue: fuel and oil marks
+]
+FONTS = {'idrive_hud_widgets': HUD_FONTS, 'cluster_themes': CLUSTER_FONTS, 'apex_dash': F30_FONTS + FA_FONTS}
 PAD = 2
 ATLAS_W = 1024
 

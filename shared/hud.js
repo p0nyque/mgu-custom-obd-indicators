@@ -108,6 +108,23 @@
  * Text and badge updates send only the one rectangle around the pixels that changed since the last paint
  *   (changes() below, after PenguinDukeYDAuto/idrive7-EVAHUD's eva_canvas.js, MIT): a 3-digit readout
  *   that goes 123 -> 124 sends its last digit, not the widget.
+ *   f30dash   effect layer; the 2017 F-series multifunction display (option 6WB) in one layer (shaders.js f30dash):
+ *             "mode" comfort | sport | eco, and in target px "spd" / "tach" [cx, cy, rim radius] (the big dials),
+ *             "fuelG" / "oilG" [cx, cy, r] (the small ones), "cap" (the black centre cap's radius, 114: BMW's gear
+ *             box hides inside the rev counter's), "flood" (Sport: the orange flood's strength, 0..1). The speed scale
+ *             follows "units" (0..260 km/h or 0..160 mph over 260 deg), the rev scale runs to 7500 with red from
+ *             the redline; the scales draw in over 800 ms after every rebuild. Numbers and words are text widgets
+ *             (design/gen_f30_layouts.py writes the f30_*.json layouts from the same geometry).
+ *   f30needles  effect layer above the text, the same keys: the F30 needles (fuel, oil, speed, revs; Eco Pro's
+ *             rev counter needle shows power)
+ *   fadash    effect layer; the F-series analogue cluster (F10 / F15 / F25, shaders.js fadash): "spd" / "tach" /
+ *             "fuelG" / "oilG" [cx, cy, ring radius] and "cap" (the big dials' black hub cap, 108: BMW's gear box
+ *             hides inside the rev counter's). Lit in BMW orange: closed rings, the big dials' grey scale bands, the rev counter's
+ *             hatched run-up and red block from the redline, the speedometer's range bar (lit by the tank), the gear
+ *             frame, the strip's orange hairlines and floor. The speed scale follows "units" (0..260 km/h or 0..160
+ *             mph over 250 deg). Numbers and words are text widgets (design/gen_fa_layout.py writes f_analog.json).
+ *   faneedles effect layer above the text, the same keys: the four red-orange needles; they sweep the scales once
+ *             (1.8 s) after every rebuild, as BMW's do at start-up
  *   boxes     effect layer; the GT3 dash's frame in ONE layer (shaders.js boxes; the car draws only a few effect
  *             layers): the background (role "color", default "bg") with the optional map "hole" as fill, and up to
  *             12 framed boxes "boxes": [{ id, x, y, w, h (target px), head (header strip px), border (2), radius
@@ -123,7 +140,10 @@
  *   (the GT3 look); "round": true for dots;
  * "off" the alpha of an unlit light (0.14).
  * Text "colorBy": "verdict" colours it by the last shift's grade. Text "near": ["speed" | "rpm", i] turns it
- * "nearColor" (fg) while scale label i is the one nearest the value (BMW lights up the label by the needle).
+ * "nearColor" (fg) while scale label i is the one nearest the value (BMW lights up the label by the needle);
+ * "near" kinds: "speed" (SPEED_SCALE index), "rpm" (thousands), "f30spd" (the F30 scale: speed / 20 in the display
+ * unit). "nearFont": a second font while it is the nearest (the F30 magnifier). Text "valign": "middle" centres the
+ * font's cell in the box (so a nearFont number grows round its centre).
  *
  * rpm is smoothed (a 120 ms filter, and the readout moves in 50 rpm steps only when it changes by 40 or
  * more), so idle wobble doesn't show, as on BMW's own tach. Shift scoring uses the raw rpm.
@@ -136,6 +156,8 @@
  * (gauge labels for 1.4 / 0.7 bar in the display unit) {{stage}} (P R N, D / S / M by the shifter programme) {{gearInD}} (gear number while in D) {{mode}} (COMFORT, SPORT, SPORT PLUS, SPORT INDIVIDUAL, ECO PRO, ...)
  * {{temp:<deg C>}} (that temperature in the display unit, °F rounded to 10, for gauge labels) {{setup:engine|chassis|steering|gearbox}} (what that part is set to in the drive mode now)
  * {{time}} {{ampm}} {{u:temp}} (°F / °C) {{gLat}} {{gLong}} (g, 2 decimals) {{signal:<car.data() key>}} (raw, 1 decimal).
+ * F30: {{gearF}} (P R N, D in D, S3 / M3 in the sport / manual programme) {{ambient1}} (outside, signed, 1 decimal)
+ * {{plus:<comfort|sport|eco>}} (that mode's name, SPORT, with + while the car is in its plus variant: SPORT+).
  * Redline (shift_score.js): {{rpm10}} (rpm to 10) {{shiftAt}} {{lastShift}} {{lastGears}} (4 > 5)
  * {{verdict}} {{shiftPrompt}} (SHIFT at the shift point) {{coldNote}} (only while the oil is cold).
  * Units follow the "units" setting: us = mph, °F, psi; metric = km/h, °C, bar.
@@ -182,6 +204,17 @@ const unitName = (map, v) => map[v] || (Object.values(map).indexOf(v) >= 0 ? v :
 // MDrive dataDisplayGearbox.displayProgramGearbox: the programme the cluster shows next to the gear (car_vitals, MIT)
 const PROGRAMS = { S_MINUS_PROGRAMM: 'S', M_MINUS_PROGRAMM: 'M', 1: 'S', 2: 'M' };
 const MODE_NAME = { comfort: 'Comfort', sport: 'Sport', eco: 'Eco Pro' };
+const MODE_LABEL = { comfort: 'COMFORT', sport: 'SPORT', eco: 'ECO PRO' };
+// F30 (f30dash, f30needles): the speed scale per unit [top, label step, mid step, minor step], linear over 260 deg;
+// the rev scale's top; how long the scales take to draw in after a rebuild; u_mode per layout "mode"
+const F30_SPEED = { metric: [260, 20, 10, 2], us: [160, 20, 10, 2] };
+const F30_RPM_TOP = 7500;
+const F30_INTRO_MS = 800;
+const F30_MODE = { comfort: 0, sport: 1, eco: 2 };
+// F-series analogue (fadash, faneedles): the speed scale per unit [top, label step, tick step, unused] over 250 deg;
+// the rev scale runs to F30_RPM_TOP; the needles sweep the scales once after every rebuild.
+const FA_SPEED = { metric: [260, 20, 10, 0], us: [160, 20, 5, 0] };
+const FA_SWEEP_MS = 1800;
 const FRESH_MS = 3000;
 // BMW's speed scale: even steps to 120 mph (180 km/h), then wider ones to 200 mph (320 km/h)
 const SPEED_SCALE = { us: [0, 20, 40, 60, 80, 100, 120, 160, 200], metric: [0, 30, 60, 90, 120, 150, 180, 250, 320] };
@@ -800,6 +833,7 @@ class HudApp {
         const v = this._raw('speed');
         if (!isNum(v)) return null;
         const us = this.setting('units') === 'us';
+        if (kind === 'f30spd') return Math.round((us ? v * 0.621371 : v) / 20);   // the F30 scale: a label every 20
         return Math.round(scaleFrac(us ? v * 0.621371 : v, SPEED_SCALE[us ? 'us' : 'metric']) * 8);
     }
 
@@ -1029,6 +1063,22 @@ class HudApp {
                 const d = this.car.data();
                 return (d.stage === 'D' || (!d.stage && isNum(d.gear))) && isNum(d.gear) && d.gear > 0 ? String(d.gear) : '';
             }
+            case 'gearF': {          // F30: P R N, D in D, S3 / M3 in the sport / manual programme
+                const d = this.car.data();
+                if (d.stage === 'P' || d.stage === 'R' || d.stage === 'N') return d.stage;
+                const p = this._program(d), g = isNum(d.gear) && d.gear > 0 ? String(Math.round(d.gear)) : '';
+                if (d.stage === 'D' || (!d.stage && g)) return p === 'D' ? 'D' : p + g;
+                return '-';
+            }
+            case 'faOil0': return us ? '160' : '70';      // the analogue oil gauge's marks: 70 / 120 / 170 C,
+            case 'faOil1': return us ? '250' : '120';     // in miles 158 / 248 / 338 F rounded
+            case 'faOil2': return us ? '340' : '170';
+            case 'ambient1': {       // outside, signed, one decimal: +6.5
+                const v = this._raw('ambient');
+                if (!isNum(v)) return '--';
+                const n = Math.round((us ? v * 9 / 5 + 32 : v) * 10) / 10;
+                return (n > 0 ? '+' : '') + n.toFixed(1);
+            }
             case 'mode': {
                 if (!this.driveMode) return '';
                 const base = this.driveMode === 'sport' ? 'SPORT' : this.driveMode === 'eco' ? 'ECO PRO' : 'COMFORT';
@@ -1051,6 +1101,10 @@ class HudApp {
                 if (tok.indexOf('spd:') === 0) { const v = SPEED_SCALE[us ? 'us' : 'metric'][Number(tok.slice(4))]; return v === undefined ? '' : String(v); }   // speed scale labels
                 if (tok.indexOf('temp:') === 0) { const c = Number(tok.slice(5)); return isNum(c) ? String(us ? Math.round((c * 9 / 5 + 32) / 10) * 10 : Math.round(c)) : '--'; }   // gauge labels: °F to the 10
                 if (tok.indexOf('setup:') === 0) { const s = this._setup(); return s ? s[tok.slice(6)] || '' : '--'; }
+                if (tok.indexOf('plus:') === 0) {   // a layout's own mode (plus:sport), with + while the car is in its plus variant
+                    const m = tok.slice(5);
+                    return (MODE_LABEL[m] || m.toUpperCase()) + (this.driveMode === m && this.driveVariant === 'plus' ? '+' : '');
+                }
                 if (tok.indexOf('signal:') === 0) { const v = this._raw(tok.slice(7)); return isNum(v) ? (Math.round(v * 10) / 10).toString() : '--'; }
                 return '{{' + tok + '}}';
         }
@@ -1273,6 +1327,38 @@ class HudApp {
         } else if (w.type === 'e39needles') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_night', [w.night ? 1 : 0]);
+        } else if (w.type === 'f30dash' || w.type === 'f30needles') {
+            c.uniform(ref, 'u_size', [w.w, w.h]);
+            c.uniform(ref, 'u_mode', [F30_MODE[w.mode] || 0]);
+            c.uniform(ref, 'u_spd', w.spd);
+            c.uniform(ref, 'u_tach', w.tach);
+            c.uniform(ref, 'u_fuelG', w.fuelG);
+            c.uniform(ref, 'u_oilG', w.oilG);
+            c.uniform(ref, 'u_cap', [isNum(w.cap) ? w.cap : 114]);
+            if (w.type === 'f30dash') {
+                c.uniform(ref, 'u_scale', F30_SPEED[this.setting('units') === 'us' ? 'us' : 'metric']);
+                // red from the redline, but always over at least the scale's last 500 rpm
+                c.uniform(ref, 'u_red', [Math.min(this.setting('redline'), F30_RPM_TOP - 500) / F30_RPM_TOP]);
+                c.uniform(ref, 'u_flood', [isNum(w.flood) ? w.flood : 1]);
+                this.f30At = Date.now();
+            }
+            c.uniform(ref, 'u_val', [0, -1, 0, 0]);
+            c.uniform(ref, 'u_val2', [0, 0]);
+        } else if (w.type === 'fadash' || w.type === 'faneedles') {
+            c.uniform(ref, 'u_size', [w.w, w.h]);
+            c.uniform(ref, 'u_spd', w.spd);
+            c.uniform(ref, 'u_tach', w.tach);
+            c.uniform(ref, 'u_fuelG', w.fuelG);
+            c.uniform(ref, 'u_oilG', w.oilG);
+            c.uniform(ref, 'u_cap', [isNum(w.cap) ? w.cap : 108]);
+            if (w.type === 'fadash') {
+                c.uniform(ref, 'u_scale', FA_SPEED[this.setting('units') === 'us' ? 'us' : 'metric']);
+                // red from the redline, but always over at least the scale's last 500 rpm
+                c.uniform(ref, 'u_red', [Math.min(this.setting('redline'), F30_RPM_TOP - 500) / F30_RPM_TOP]);
+                this.faAt = Date.now();
+            }
+            c.uniform(ref, 'u_val', [0, -1, 0, 0]);
+            c.uniform(ref, 'u_val2', [0, 0]);
         } else if (w.type === 'sdash') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_geo', w.geo);
@@ -1552,7 +1638,8 @@ class HudApp {
             const s = this._resolve(w.text);
             let role = w.color || 'fg';
             if (w.colorBy === 'verdict' && this.score.last) role = VERDICT[this.score.last.verdict] || role;
-            if (w.near && this._nearMark(w.near[0]) === w.near[1]) role = w.nearColor || 'fg';
+            let font = w.font;
+            if (w.near && this._nearMark(w.near[0]) === w.near[1]) { role = w.nearColor || 'fg'; font = w.nearFont || font; }
             if (w.warn) {            // e.g. {"signal": "coolant", "above": 112} or {"signal": "fuel", "below": 0.15}: shift red past the limit
                 const v = this._raw(w.warn.signal);
                 if (isNum(v) && ((isNum(w.warn.above) && v > w.warn.above) || (isNum(w.warn.below) && v < w.warn.below))) role = 'hot';
@@ -1573,11 +1660,12 @@ class HudApp {
                 const target = w.id.slice(w.id.lastIndexOf('_') + 1);
                 if (this._token('gearCell:' + target) === target) role = 'ink';
             }
-            const key = s + '|' + role + (svcActive ? '|1' : '');
+            const key = s + '|' + role + '|' + font + (svcActive ? '|1' : '');
             if (!force && key === x.last) return;
             x.last = key; x.lastPaint = now;
             const buf = textRaster.drawText(w.w, w.h, s, {
-                font: w.font, color: svcActive ? [255, 214, 150, 255] : color(this.theme, role), align: w.align, spacing: w.spacing,
+                font, color: svcActive ? [255, 214, 150, 255] : color(this.theme, role), align: w.align, spacing: w.spacing,
+                offsetY: w.valign === 'middle' ? Math.round((w.h - textRaster.loadFont(font).metrics.cellHeight) / 2) : 0,
                 color2: svcActive ? color(this.theme, 'accent') : (w.color2 && role !== 'hot' ? color(this.theme, w.color2) : null),
                 glow: svcActive ? (this.theme.glow || 0.65) : (w.glow ? this.theme.glow : 0),
             });
@@ -1688,6 +1776,20 @@ class HudApp {
             x.c.uniform(x.ref, 'u_fuel', [vals[2]]);
             x.c.uniform(x.ref, 'u_oil', [vals[3]]);
             x.c.uniform(x.ref, 'u_coolant', [vals[4]]);
+        } else if (w.type === 'f30dash' || w.type === 'f30needles') {
+            const v = this._f30(now);
+            const key = v.join('|');
+            if (!force && key === x.last) return;
+            x.last = key;
+            x.c.uniform(x.ref, 'u_val', v.slice(0, 4));
+            x.c.uniform(x.ref, 'u_val2', v.slice(4, 6));
+        } else if (w.type === 'fadash' || w.type === 'faneedles') {
+            const v = this._fa(now);
+            const key = v.join('|');
+            if (!force && key === x.last) return;
+            x.last = key;
+            x.c.uniform(x.ref, 'u_val', v.slice(0, 4));
+            x.c.uniform(x.ref, 'u_val2', v.slice(4, 6));
         } else if (w.type === 'sdash') {
             const us = this.setting('units') === 'us';
             const sp = this._raw('speed'), rpm = this._raw('rpm'), fuel = this._raw('fuel'), oil = this._raw('oil');
@@ -1756,6 +1858,52 @@ class HudApp {
             x.c.uniform(x.ref, 'u_lit', [lit]);
             x.c.uniform(x.ref, 'u_strobe', [sp.now ? 1 : 0]);
         }
+    }
+
+    /**
+     * The F30 dials' live values, the same for f30dash and f30needles in one tick: [speed 0..1 of the scale in the
+     * display unit, rpm 0..1 of 7500 (-1: no data, the needle rests on OFF), fuel 0..1, oil 0..1 (70..150 C),
+     * power 0..1 (Eco Pro), intro 0..1 (since the layout was built)]. Rounded, so a still car sends nothing.
+     * A missing fuel, oil or power reading shows as 0, never a made-up level.
+     */
+    _f30(now) {
+        if (this.f30Cache && this.f30Cache.t === now) return this.f30Cache.v;
+        const us = this.setting('units') === 'us';
+        const q = (v) => Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000;
+        const sp = this._raw('speed'), rpm = this._raw('rpm'), fuel = this._raw('fuel'), oil = this._raw('oil'), pw = this._raw('powerPct');
+        const v = [
+            isNum(sp) ? q((us ? sp * 0.621371 : sp) / F30_SPEED[us ? 'us' : 'metric'][0]) : 0,
+            isNum(rpm) ? q(rpm / F30_RPM_TOP) : -1,
+            isNum(fuel) ? q(fuel) : 0,
+            isNum(oil) ? q((oil - 70) / 80) : 0,
+            isNum(pw) ? q(pw / 100) : 0,
+            q((now - (this.f30At || 0)) / F30_INTRO_MS),
+        ];
+        this.f30Cache = { t: now, v };
+        return v;
+    }
+
+    /**
+     * The analogue dials' live values, the same for fadash and faneedles in one tick: [speed 0..1 of the scale in
+     * the display unit, rpm 0..1 of 7500 (-1: no data, the needle rests on 0), fuel 0..1, oil 0..1 (70..170 C),
+     * the start-up sweep 0..1 (since the layout was built), 0]. Rounded, so a still car sends nothing once the
+     * sweep is over. A missing fuel or oil reading shows as 0, never a made-up level.
+     */
+    _fa(now) {
+        if (this.faCache && this.faCache.t === now) return this.faCache.v;
+        const us = this.setting('units') === 'us';
+        const q = (v) => Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000;
+        const sp = this._raw('speed'), rpm = this._raw('rpm'), fuel = this._raw('fuel'), oil = this._raw('oil');
+        const v = [
+            isNum(sp) ? q((us ? sp * 0.621371 : sp) / FA_SPEED[us ? 'us' : 'metric'][0]) : 0,
+            isNum(rpm) ? q(rpm / F30_RPM_TOP) : -1,
+            isNum(fuel) ? q(fuel) : 0,
+            isNum(oil) ? q((oil - 70) / 100) : 0,
+            q((now - (this.faAt || 0)) / FA_SWEEP_MS),
+            0,
+        ];
+        this.faCache = { t: now, v };
+        return v;
     }
 
     /** A rounded tag: fill in the tone colour (bright for a fresh grade), text centred on it. Empty text: nothing. */

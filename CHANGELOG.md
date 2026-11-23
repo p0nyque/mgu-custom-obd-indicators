@@ -2,6 +2,11 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 23 2026 (not yet pushed)
+
+- **Apex Dash 1.3.0** (now called F-Series Cluster in the Store): the F-series analogue cluster, after BMW's analogue instruments of the F10 / F15 / F25 (2009-2018): lit in BMW orange as they are at night: fuel gauge, speedometer, rev counter and oil temperature gauge in closed orange rings, the big dials with a grey scale band and orange ticks, the rev counter's hatched run-up and red block from the redline, the range bar along the speedometer's bottom, the gear in a frame, and Time, Range and Temp between the dials on orange hairlines over an orange floor (after the 6WA strip). Red-orange needles that sweep the scales once at start-up. The rev counter is centred on BMW's black gear box, which hides inside a black hub cap, so the big needles start at the cap's edge. New default: the analogue layout, with drive mode switching off; the F30 and E39 layouts stay in the list. Checked on the bench only, not yet in the car.
+- **Apex Dash:** the F30 cluster, after BMW's 2017 F-series multifunction instrument display (option 6WB, F30 / F32 LCI): two round dials with the fuel and oil temperature gauges beside them and a time / outside temperature strip between, in three looks that follow the drive mode buttons. Comfort: black faces, white scales, red needles, the range bar under the speedometer. Sport: a deep orange flood, the red-orange of the E-series' instrument lighting (E39, E46, E90), a lit sweep up to each needle, a large digital speed, SPORT or SPORT+ above the gear. Eco Pro: blue, with the rev counter turned into the CHARGE / POWER gauge (from the engine's power) and the road graphic between the dials. The number nearest each needle grows, as on BMW's own. The rev counter is centred on BMW's black gear box, which hides inside its black centre cap. To follow the drive mode, turn on "Change with SPORT / COMFORT / ECO PRO" and pick an F30 look for each mode. Checked on the bench only, not yet in the car.
+
 ## Nov 7 2026
 
 - **Cluster Themes 0.8.4:** the M theme fills the panel: taller blades and cards that reach from the top of the screen to the bottom, bigger side groups, and black cards with a grey rim so BMW's black gear box no longer shows as a hole. New Map calibration theme for measuring the map cut-out on a photo.

@@ -1,8 +1,8 @@
 {
   "id": "apex_dash",
-  "title": "E39 M5 Cluster (Marko DEV)",
-  "description": "Authentic BMW E39 M5 digital cluster for iDrive 7 and 8 (MGU) by Marko DEV. Features 5-needle startup sweep self-test, Check Control OBC display, dynamic LED warm-up arch, 7/8-speed Steptronic/DKG selector, and Service-Interval indicator.",
-  "version": "1.2.0",
+  "title": "F-Series Cluster",
+  "description": "BMW F-series analogue instrument cluster for iDrive 7 and 8 (MGU), lit in BMW orange: fuel, speed, revs and oil temperature dials with a start-up needle sweep, the gear, time, range and outside temperature. Also has the 2017 F30 digital looks (Comfort, Sport, Eco Pro) and Marko DEV's E39 M5 clusters.",
+  "version": "1.3.0",
   "vendor": "custom",
   "loggingId": "OAD1",
   "iconGlyph": "APX",
@@ -96,8 +96,24 @@
       "key": "hudLayout",
       "label": "Theme",
       "type": "choice",
-      "default": "e39_m5_v2",
+      "default": "f_analog",
       "options": [
+        [
+          "f_analog",
+          "F-series analogue (F10 / F15)"
+        ],
+        [
+          "f30_comfort",
+          "F30 Comfort (2017)"
+        ],
+        [
+          "f30_sport",
+          "F30 Sport (2017)"
+        ],
+        [
+          "f30_eco",
+          "F30 Eco Pro (2017)"
+        ],
         [
           "e39_m5_v2",
           "E39 M5 Cluster (Marko DEV)"
@@ -134,8 +150,24 @@
       "key": "inComfort",
       "label": "In Comfort",
       "type": "choice",
-      "default": "e39_m5_v2",
+      "default": "f_analog",
       "options": [
+        [
+          "f_analog",
+          "F-series analogue (F10 / F15)"
+        ],
+        [
+          "f30_comfort",
+          "F30 Comfort (2017)"
+        ],
+        [
+          "f30_sport",
+          "F30 Sport (2017)"
+        ],
+        [
+          "f30_eco",
+          "F30 Eco Pro (2017)"
+        ],
         [
           "e39_m5_v2",
           "E39 M5 Cluster (Marko DEV)"
@@ -162,8 +194,24 @@
       "key": "inSport",
       "label": "In Sport",
       "type": "choice",
-      "default": "e39_m5_v2_night",
+      "default": "f_analog",
       "options": [
+        [
+          "f_analog",
+          "F-series analogue (F10 / F15)"
+        ],
+        [
+          "f30_sport",
+          "F30 Sport (2017)"
+        ],
+        [
+          "f30_comfort",
+          "F30 Comfort (2017)"
+        ],
+        [
+          "f30_eco",
+          "F30 Eco Pro (2017)"
+        ],
         [
           "e39_m5_v2_night",
           "E39 M5 Night Cluster (Marko DEV)"
@@ -190,8 +238,24 @@
       "key": "inEco",
       "label": "In Eco Pro",
       "type": "choice",
-      "default": "e39_m5_v2",
+      "default": "f_analog",
       "options": [
+        [
+          "f_analog",
+          "F-series analogue (F10 / F15)"
+        ],
+        [
+          "f30_eco",
+          "F30 Eco Pro (2017)"
+        ],
+        [
+          "f30_comfort",
+          "F30 Comfort (2017)"
+        ],
+        [
+          "f30_sport",
+          "F30 Sport (2017)"
+        ],
         [
           "e39_m5_v2",
           "E39 M5 Cluster (Marko DEV)"

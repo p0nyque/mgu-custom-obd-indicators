@@ -10,6 +10,8 @@ Custom instrument cluster layout recreating the classic BMW E39 M5 gauge cluster
 
 | Dash | Look |
 |---|---|
+| **F-series analogue (F10 / F15)** | The default. BMW's analogue cluster of 2009-2018, lit in BMW orange: fuel gauge, speedometer, rev counter and oil temperature gauge in closed rings, red-orange needles that sweep at start-up, the range bar under the speedometer, the gear in a frame, and Time, Range and Temp between the dials on orange hairlines. Written by `design/gen_fa_layout.py`. |
+| **F30 Comfort / Sport / Eco Pro (2017)** | The 2017 F-series multifunction instrument display (option 6WB): two round dials, fuel and oil temperature gauges beside them, time and outside temperature between. One look per drive mode, picked by the mode buttons (turn on "Change with SPORT / COMFORT / ECO PRO" and pick one for each mode): Comfort black and white with red needles, Sport with a deep E-series orange flood and a large digital speed, Eco Pro in blue with the CHARGE / POWER gauge. The layouts are written by `design/gen_f30_layouts.py`. |
 | **E39 M5 Cluster** | Faithful daylight recreation of the BMW E39 M5 instrument cluster: dual 300 km/h speedometer and 8,000 RPM tachometer with italic numerals, oil temperature dial, coolant temperature, fuel gauge, dynamic 5-needle startup sweep self-test, Check Control OBC animation, dynamic LED warm-up arch (Vorwarnfeld), 5-segment Service-Interval display (SIA), and 7/8-speed Steptronic / DKG selector. |
 | **E39 M5 Night Cluster** | Authentic night illumination featuring iconic BMW amber gauge backlighting, dimmed instrument faces, and illuminated fluorescent red/orange needles. |
 

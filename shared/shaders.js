@@ -1881,4 +1881,605 @@ void main() {
 }
 `;
 
-module.exports = { shiftbar: SHIFTBAR, arc: ARC, revbar: REVBAR, lights: LIGHTS, fill: FILL, box: BOX, grid: GRID, segbar: SEGBAR, mdash: MDASH, mtach: MTACH, sdash: SDASH, e39dash: E39DASH, e39needles: E39NEEDLES, boxes: BOXES, atext: ATEXT };
+// The parts F30DASH and F30NEEDLES share: geometry uniforms, the mode, the scales' angles and small helpers.
+const F30_COMMON = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 v_uv;
+uniform vec2 u_size;
+uniform float u_mode;     // 0 Comfort, 1 Sport, 2 Eco Pro
+uniform vec3 u_spd;       // speedometer: centre x, y and rim radius (target px)
+uniform vec3 u_tach;      // rev counter (centred on BMW's gear box)
+uniform vec3 u_fuelG;     // fuel gauge, left of the speedometer
+uniform vec3 u_oilG;      // oil temperature gauge, right of the rev counter
+uniform float u_cap;      // the black centre cap's radius; BMW's gear box hides inside the rev counter's
+uniform vec4 u_val;       // speed 0..1 of the scale, rpm 0..1 of 7500 (< 0: no data), fuel 0..1, oil 0..1 (70..150 C)
+uniform vec2 u_val2;      // power 0..1 (Eco Pro), intro 0..1 (the scales draw in after a rebuild)
+
+const float PI = 3.14159265359;
+const float D2R = 0.0174532925;
+const float SPD0 = -130.0;   // the speed scale: 0 at 7 o'clock, clockwise ...
+const float SPDW = 260.0;    // ... over the top to 5 o'clock
+const float TACH0 = -113.0;  // the rev scale: 0 rpm (READY) ...
+const float TACHW = 243.0;   // ... to 7500 rpm
+const float OFFA = -130.0;   // the rev counter's OFF mark, where the needle rests without data
+const float POWW = 140.0;    // Eco Pro: POWER runs from 12 o'clock clockwise this far
+
+float cov(float d) { return clamp(0.5 - d, 0.0, 1.0); }
+vec4 over(vec4 top, vec4 under) {
+    float a = top.a + under.a * (1.0 - top.a);
+    if (a <= 0.0) return vec4(0.0);
+    return vec4((top.rgb * top.a + under.rgb * under.a * (1.0 - top.a)) / a, a);
+}
+float angOf(vec2 q) { return atan(q.x, -q.y) / D2R; }      // clockwise degrees from 12 o'clock, -180..180
+vec2 dirA(float a) { return vec2(sin(a * D2R), -cos(a * D2R)); }
+bool isSport() { return u_mode > 0.5 && u_mode < 1.5; }
+bool isEco() { return u_mode > 1.5; }
+`;
+
+const F30DASH = `// The 2017 F-series multifunction instrument display (option 6WB, F30 / F32 LCI) in one cluster-render
+// "effect" layer (GLSL ES 1.00), after BMW's 2017 press photos (kept privately, not in this repo): two big round dials with a thin
+// grey rim, the fuel and oil temperature gauges tucked beside them, a strip between the dials' lower halves. One
+// shader for the three looks (u_mode): Comfort (black faces, white scales, red needles), Sport (a deep E-series orange flood, a
+// lit sweep, the digital speed) and Eco Pro (blue; the rev counter becomes the CHARGE / POWER gauge).
+// BMW's gear box (x 1406..1597, y 342..419) is solid black over us: the rev counter is centred on it and both dials
+// have a black centre cap (u_cap) the box hides inside; the needles (f30needles) start at the cap's edge.
+// Large areas stay pure black (the car brightens dark tints, hud_themes.js). The numbers and words are text
+// widgets above this layer.
+` + F30_COMMON + `
+uniform vec4 u_scale;     // the speed scale in the display unit: top, label step, mid step, minor step
+uniform float u_red;      // where the red zone starts, 0..1 of the rev scale
+uniform float u_flood;    // Sport: strength of the orange flood
+
+// a radial tick at angle a from radius r0 to r1, half width hw
+float tickD(vec2 q, float a, float r0, float r1, float hw) {
+    vec2 d = dirA(a);
+    float al = dot(q, d);
+    return max(abs(dot(q, vec2(-d.y, d.x))) - hw, max(r0 - al, al - r1));
+}
+// a band on the circle rc (half width hw) from angle a0 to a1, for a pixel at radius r and angle a (same frame)
+float arcD(float r, float a, float rc, float hw, float a0, float a1) {
+    return max(abs(r - rc) - hw, max(a0 - a, a - a1) * D2R * r);
+}
+float segT(vec2 p, vec2 a, vec2 b) { vec2 ba = b - a; return clamp(dot(p - a, ba) / dot(ba, ba), 0.0, 1.0); }
+float segD(vec2 p, vec2 a, vec2 b) { return length(p - mix(a, b, segT(p, a, b))); }
+vec3 markCol() { return isEco() ? vec3(0.84, 0.92, 1.0) : vec3(0.90, 0.93, 0.97); }
+vec3 redCol() { return vec3(0.90, 0.17, 0.22); }
+vec3 blueCol() { return vec3(0.22, 0.56, 1.0); }
+// Sport: E-series orange, the deep red-orange of the E39 / E46 / E90 instrument lighting (hud_themes.js f30s: [214, 60, 0])
+vec3 orangeCol() { return vec3(0.84, 0.235, 0.0); }
+// 0 until the intro reaches the scale fraction f, then 1: the scales draw in clockwise after a rebuild
+float shown(float f) { return clamp((u_val2.y * 1.08 - f) * 30.0, 0.0, 1.0); }
+
+// the thin rim round every dial, lighter at the top; tinted by the mode
+vec4 rim(vec2 q, float r, float R, vec4 c) {
+    float top = 0.5 - 0.5 * q.y / max(r, 1.0);
+    vec3 col = mix(vec3(0.16, 0.18, 0.21), vec3(0.44, 0.48, 0.53), top);
+    if (isSport()) col = mix(col, vec3(0.36, 0.10, 0.015), 0.4);
+    if (isEco()) col = mix(col, vec3(0.14, 0.30, 0.55), 0.4);
+    return over(vec4(col, cov(abs(r - R) - 1.4)), c);
+}
+
+// the centre cap's ring
+vec4 capRing(float r, vec4 c) {
+    vec3 col = isSport() ? vec3(0.30, 0.08, 0.01) : isEco() ? vec3(0.10, 0.24, 0.46) : vec3(0.19, 0.21, 0.24);
+    return over(vec4(col, cov(abs(r - u_cap) - 0.8) * shown(0.0)), c);
+}
+
+// Sport: the face glows E-series orange towards the rim (weaker over the bottom), the sweep from the scale's start to the
+// value is lit, brightest by the needle; faint dark spokes at every label.
+vec4 flood(vec2 q, float r, float a, float R, float a0, float aw, float val, float spoke, vec4 c) {
+    float rT = R * 0.855;
+    float f = smoothstep(u_cap, R * 0.9, r) * (1.0 - smoothstep(R * 0.93, R * 0.985, r));
+    float low = 1.0 - 0.55 * smoothstep(0.2 * R, 0.85 * R, q.y);
+    c = over(vec4(mix(vec3(0.12, 0.027, 0.0), vec3(0.39, 0.095, 0.0), f), u_flood * f * low * u_val2.y), c);
+    float lit = aw * clamp(val, 0.0, 1.0);
+    if (lit > 0.2) {
+        float r0 = R * 0.56;
+        float d = max(max(a0 - a, a - (a0 + lit)) * D2R * r, max(r0 - r, r - rT));
+        float g = smoothstep(r0, rT, r);
+        float lead = smoothstep(lit - 45.0, lit, a - a0);
+        vec3 lc = mix(vec3(0.28, 0.06, 0.0), vec3(0.74, 0.21, 0.0), g);
+        lc = mix(lc, vec3(0.92, 0.38, 0.12), 0.35 * lead * g);
+        c = over(vec4(lc, (0.40 + 0.55 * g) * cov(d) * u_val2.y), c);
+    }
+    // spokes: every "spoke" degrees from the start
+    float k = floor((a - a0) / spoke + 0.5);
+    float sa = a0 + k * spoke;
+    if (sa >= a0 - 0.1 && sa <= a0 + aw + 0.1) c = over(vec4(0.0, 0.0, 0.0, 0.45 * cov(tickD(q, sa, u_cap + 10.0, rT, 0.7)) * u_val2.y), c);
+    return c;
+}
+
+// the speed scale: labels, mid and minor ticks (Comfort, Eco Pro)
+vec4 speedTicks(vec2 q, float r, float a, float rT, vec4 c) {
+    if (r < rT - 30.0 || r > rT + 2.0 || a < SPD0 - 3.0 || a > SPD0 + SPDW + 3.0) return c;
+    float top = u_scale.x;
+    float k = floor((a - SPD0) / SPDW * top / u_scale.w + 0.5);
+    float tv = clamp(k * u_scale.w, 0.0, top);
+    float ta = SPD0 + SPDW * tv / top;
+    bool maj = abs(tv / u_scale.y - floor(tv / u_scale.y + 0.5)) < 0.01;
+    bool mid = abs(tv / u_scale.z - floor(tv / u_scale.z + 0.5)) < 0.01;
+    float len = maj ? 24.0 : mid ? 14.0 : 8.0;
+    float hw = maj ? 1.7 : mid ? 1.2 : 0.8;
+    float al = maj ? 1.0 : mid ? 0.85 : 0.6;
+    return over(vec4(markCol(), al * cov(tickD(q, ta, rT - len, rT, hw)) * shown(tv / top)), c);
+}
+
+// the rev scale: 1000 / 500 / 100 rpm ticks, red from u_red; Sport shows only the red ones
+vec4 revTicks(vec2 q, float r, float a, float rT, vec4 c) {
+    if (r < rT - 30.0 || r > rT + 2.0) return c;
+    if (!isSport()) c = over(vec4(markCol() * 0.85, cov(tickD(q, OFFA, rT - 14.0, rT, 1.2)) * shown(0.0)), c);
+    if (a < TACH0 - 3.0 || a > TACH0 + TACHW + 3.0) return c;
+    float tv = clamp(floor((a - TACH0) / TACHW * 75.0 + 0.5) * 100.0, 0.0, 7500.0);
+    float ta = TACH0 + TACHW * tv / 7500.0;
+    bool maj = abs(tv / 1000.0 - floor(tv / 1000.0 + 0.5)) < 0.01;
+    bool mid = abs(tv / 500.0 - floor(tv / 500.0 + 0.5)) < 0.01;
+    bool red = tv / 7500.0 >= u_red - 0.0001;
+    if (isSport() && !red) return c;
+    float len = maj ? 24.0 : (mid || red) ? 14.0 : 8.0;
+    float hw = maj ? 1.7 : (mid || red) ? 1.25 : 0.8;
+    float al = maj || red ? 1.0 : mid ? 0.85 : 0.6;
+    vec3 col = red ? redCol() : markCol();
+    return over(vec4(col, al * cov(tickD(q, ta, rT - len, rT, hw)) * shown(tv / 7500.0)), c);
+}
+
+// Comfort / Eco Pro: the range bar along the speedometer's bottom (lit as far as the tank is full)
+vec4 rangeArc(vec2 q, float r, float R, vec4 c) {
+    float rc = R * 0.83;
+    if (abs(r - rc) > 8.0) return c;
+    float a = angOf(q);
+    if (a < 0.0) a += 360.0;                 // the bottom: 142 (right end) .. 218 (left end)
+    c = over(vec4(vec3(0.30, 0.33, 0.37), cov(arcD(r, a, rc, 0.9, 142.0, 218.0)) * shown(0.0)), c);
+    float f = clamp(u_val.z, 0.0, 1.0);
+    if (f > 0.0) c = over(vec4(isEco() ? vec3(0.88, 0.94, 1.0) : redCol(), cov(arcD(r, a, rc, 2.4, 218.0 - 76.0 * f, 218.0)) * shown(0.0)), c);
+    float e = min(tickD(q, 218.0, rc - 6.0, rc + 6.0, 1.0), tickD(q, 142.0, rc - 6.0, rc + 6.0, 1.0));
+    return over(vec4(markCol() * 0.8, cov(e) * shown(0.0)), c);
+}
+
+// Eco Pro on the speedometer: a blue glow along the tick ring (stronger up the scale) and the inner sweep to the speed
+vec4 ecoSpeed(float r, float a, float rT, vec4 c) {
+    if (a < SPD0 - 4.0 || a > SPD0 + SPDW + 4.0) return c;
+    float t = clamp((a - SPD0) / SPDW, 0.0, 1.0);
+    float d = arcD(r, a, rT + 3.0, 2.0, SPD0, SPD0 + SPDW);
+    c = over(vec4(blueCol(), 0.22 * t * exp(-max(d, 0.0) / 7.0) * shown(t)), c);
+    c = over(vec4(blueCol(), (0.3 + 0.6 * t) * cov(d) * shown(t)), c);
+    float lit = SPDW * clamp(u_val.x, 0.0, 1.0);
+    if (lit > 0.2) {
+        float di = arcD(r, a, u_cap + 20.0, 2.0, SPD0, SPD0 + lit);
+        c = over(vec4(blueCol(), 0.3 * exp(-max(di, 0.0) / 6.0) * u_val2.y), c);
+        c = over(vec4(vec3(0.45, 0.75, 1.0), cov(di) * u_val2.y), c);
+    }
+    return c;
+}
+
+// Eco Pro on the rev counter: CHARGE (12 o'clock anticlockwise) and POWER (clockwise, lit to the power), the zero
+// mark, and the inner Efficient Dynamics arc
+vec4 powerGauge(vec2 q, float r, float a, float rT, vec4 c) {
+    float rc = rT - 7.0;
+    float s = shown(0.3);
+    c = over(vec4(vec3(0.55, 0.62, 0.72), 0.35 * cov(arcD(r, a, rc, 6.0, -65.0, 0.0)) * s), c);
+    c = over(vec4(vec3(0.07, 0.20, 0.48), 0.9 * cov(arcD(r, a, rc, 6.0, 0.0, POWW)) * s), c);
+    float lit = POWW * clamp(u_val2.x, 0.0, 1.0);
+    if (lit > 0.2) {
+        float dl = arcD(r, a, rc, 6.0, 0.0, lit);
+        c = over(vec4(blueCol(), 0.35 * exp(-max(dl, 0.0) / 6.0) * s), c);
+        c = over(vec4(mix(vec3(0.20, 0.50, 1.0), vec3(0.72, 0.90, 1.0), clamp(a / lit, 0.0, 1.0)), cov(dl) * s), c);
+    }
+    float k = clamp(floor((a + 65.0) / 13.0 + 0.5), 0.0, 5.0);
+    c = over(vec4(markCol(), 0.8 * cov(tickD(q, -65.0 + 13.0 * k, rc - 6.0, rc + 6.0, 0.9)) * s), c);
+    c = over(vec4(vec3(1.0), cov(tickD(q, 0.0, rc - 14.0, rc + 10.0, 1.6)) * s), c);
+    float di = arcD(r, a, u_cap + 15.0, 1.4, -55.0, 100.0);
+    c = over(vec4(blueCol(), 0.25 * exp(-max(di, 0.0) / 5.0) * shown(0.5)), c);
+    return over(vec4(vec3(0.30, 0.62, 1.0), 0.9 * cov(di) * shown(0.5)), c);
+}
+
+// the gear's trapezoid at the rev counter's bottom (its letter is a text widget)
+vec4 gearFrame(vec2 p, vec4 c) {
+    vec2 o = u_tach.xy + vec2(0.0, 158.0);
+    vec2 l0 = o + vec2(-42.0, 0.0), r0 = o + vec2(42.0, 0.0);
+    float d = min(segD(p, l0, r0), min(segD(p, l0, o + vec2(-66.0, 44.0)), segD(p, r0, o + vec2(66.0, 44.0))));
+    vec3 col = isSport() ? orangeCol() : isEco() ? vec3(0.30, 0.62, 1.0) : vec3(0.55, 0.60, 0.66);
+    return over(vec4(col, cov(d - 1.1) * shown(0.9)), c);
+}
+
+vec4 speedo(vec2 p, vec4 c) {
+    vec2 q = p - u_spd.xy;
+    float R = u_spd.z, r = length(q);
+    if (r > R + 3.0) return c;
+    c = over(vec4(0.0, 0.0, 0.0, cov(r - R)), c);
+    float a = angOf(q), rT = R * 0.855;
+    if (isSport()) c = flood(q, r, a, R, SPD0, SPDW, u_val.x, SPDW * u_scale.y / u_scale.x, c);
+    else {
+        if (isEco()) c = ecoSpeed(r, a, rT, c);
+        c = speedTicks(q, r, a, rT, c);
+        c = rangeArc(q, r, R, c);
+    }
+    c = capRing(r, c);
+    return rim(q, r, R, c);
+}
+
+vec4 revs(vec2 p, vec4 c) {
+    vec2 q = p - u_tach.xy;
+    float R = u_tach.z, r = length(q);
+    if (r > R + 3.0) return c;
+    c = over(vec4(0.0, 0.0, 0.0, cov(r - R)), c);
+    float a = angOf(q), rT = R * 0.855;
+    if (isEco()) c = powerGauge(q, r, a, rT, c);
+    else {
+        if (isSport()) c = flood(q, r, a, R, TACH0, TACHW, u_val.y, TACHW * 1000.0 / 7500.0, c);
+        c = revTicks(q, r, a, rT, c);
+    }
+    c = capRing(r, c);
+    c = rim(q, r, R, c);
+    return gearFrame(p, c);
+}
+
+// a small gauge: fuel (left, full at 12 o'clock, empty at 5 o'clock, anticlockwise round the outer side) or oil
+// temperature (its mirror: cold at 7, hot at 12); ticks every eighth, red / blue zones
+vec4 side(vec2 p, vec3 g, bool oil, vec4 c) {
+    vec2 q = p - g.xy;
+    float R = g.z, r = length(q);
+    if (r > R + 3.0) return c;
+    c = over(vec4(0.0, 0.0, 0.0, cov(r - R)), c);
+    c = rim(q, r, R, c);
+    float a = angOf(q), f;
+    if (oil) { if (a < -90.0) a += 360.0; f = (210.0 - a) / 200.0; }
+    else { if (a > 90.0) a -= 360.0; f = (a + 210.0) / 200.0; }
+    float rT = R * 0.88;
+    float zr = rT - 3.0, k200 = 200.0 * D2R * r;
+    float dLow = max(abs(r - zr) - 2.2, max(0.0 - f, f - 0.125) * k200);
+    float dHigh = max(abs(r - zr) - 2.2, max(0.875 - f, f - 1.0) * k200);
+    c = over(vec4(oil ? blueCol() : redCol(), cov(dLow) * shown(0.0)), c);
+    if (oil) c = over(vec4(redCol(), cov(dHigh) * shown(0.9)), c);
+    float k = clamp(floor(f * 8.0 + 0.5), 0.0, 8.0);
+    float ta = oil ? 210.0 - 25.0 * k : -210.0 + 25.0 * k;
+    bool maj = abs(k / 4.0 - floor(k / 4.0 + 0.5)) < 0.01;
+    vec3 col = isSport() ? vec3(0.86, 0.29, 0.04) : markCol();
+    return over(vec4(col, (maj ? 1.0 : 0.7) * cov(tickD(q, ta, rT - (maj ? 11.0 : 6.0), rT, maj ? 1.4 : 1.0)) * shown(k / 8.0)), c);
+}
+
+// Sport: a chrome blade off the rim between the dials (three points round the dial centre: angle, radius / R)
+vec4 wing(vec2 p, vec2 C, float R, float a0, float a1, float a2, vec4 c) {
+    vec2 P0 = C + dirA(a0) * R * 1.07, P1 = C + dirA(a1) * R * 1.14, P2 = C + dirA(a2) * R * 1.225;
+    float h0 = segT(p, P0, P1), h1 = segT(p, P1, P2);
+    float d0 = length(p - mix(P0, P1, h0)), d1 = length(p - mix(P1, P2, h1));
+    float t = d0 < d1 ? 0.5 * h0 : 0.5 + 0.5 * h1;
+    float d = min(d0, d1) - (0.4 + 1.9 * sin(PI * t));
+    c = over(vec4(vec3(0.72, 0.19, 0.0), 0.3 * t * exp(-max(d, 0.0) / 5.0) * u_val2.y), c);
+    return over(vec4(mix(vec3(0.50, 0.52, 0.56), vec3(1.0), t), mix(0.25, 1.0, t) * cov(d) * u_val2.y), c);
+}
+
+// Eco Pro: the road ahead between the dials, a bright slab and rungs that fade into the distance
+vec4 road(vec2 p, vec2 o, vec4 c) {
+    if (abs(p.x - o.x) > 240.0 || p.y < o.y - 140.0 || p.y > o.y + 40.0) return c;
+    vec2 e = p - (o + vec2(0.0, -45.0));
+    c = over(vec4(blueCol(), 0.16 * exp(-dot(e / vec2(200.0, 60.0), e / vec2(200.0, 60.0)) * 1.5) * u_val2.y), c);
+    vec2 s = abs(p - o) - vec2(143.0, 0.0);
+    float ds = length(max(s, 0.0)) + min(max(s.x, s.y), 0.0) - 7.0;
+    c = over(vec4(blueCol(), 0.5 * exp(-max(ds, 0.0) / 7.0) * u_val2.y), c);
+    c = over(vec4(vec3(0.55, 0.80, 1.0), cov(ds) * u_val2.y), c);
+    for (int i = 1; i < 5; i++) {
+        float t = 1.0 - pow(0.72, float(i));
+        float y = o.y - 100.0 * t, hw = 150.0 - 80.0 * t;
+        float d = segD(p, vec2(o.x - hw, y), vec2(o.x + hw, y)) - 1.3;
+        c = over(vec4(vec3(0.40, 0.70, 1.0), (0.9 - 0.7 * t) * cov(d) * u_val2.y), c);
+    }
+    float dl = segD(p, o + vec2(-158.0, 6.0), o + vec2(-70.0, -100.0));
+    float dr = segD(p, o + vec2(158.0, 6.0), o + vec2(70.0, -100.0));
+    float fade = clamp((p.y - (o.y - 100.0)) / 106.0, 0.0, 1.0);
+    return over(vec4(vec3(0.35, 0.65, 1.0), (0.2 + 0.7 * fade) * cov(min(dl, dr) - 1.4) * u_val2.y), c);
+}
+
+// between the dials: the strip's top line, and the mode's light (Comfort a soft glow, Sport the orange band and the
+// chrome wings, Eco Pro the road)
+vec4 centre(vec2 p, vec4 c) {
+    float xL = u_spd.x + u_spd.z, xR = u_tach.x - u_tach.z;
+    float cx = 0.5 * (xL + xR), yS = u_spd.y + 176.0;
+    float fx = smoothstep(xL - 40.0, xL + 20.0, p.x) * (1.0 - smoothstep(xR - 20.0, xR + 40.0, p.x));
+    vec3 lineCol = isSport() ? vec3(0.34, 0.10, 0.015) : isEco() ? vec3(0.18, 0.36, 0.62) : vec3(0.30, 0.33, 0.37);
+    c = over(vec4(lineCol, 0.85 * fx * cov(abs(p.y - yS) - 0.7)), c);
+    if (isSport()) {
+        float dy = p.y - u_spd.y;
+        float band = 0.6 * exp(-dy * dy / 392.0) + 0.22 * exp(-dy * dy / 4608.0);
+        float bx = smoothstep(xL - 10.0, xL + 60.0, p.x) * (1.0 - smoothstep(xR - 60.0, xR + 10.0, p.x));
+        c = over(vec4(vec3(0.52, 0.13, 0.0), band * bx * u_flood * u_val2.y), c);
+        c = wing(p, u_spd.xy, u_spd.z, 42.0, 55.0, 66.0, c);
+        c = wing(p, u_spd.xy, u_spd.z, 138.0, 125.0, 114.0, c);
+        c = wing(p, u_tach.xy, u_tach.z, -42.0, -55.0, -66.0, c);
+        c = wing(p, u_tach.xy, u_tach.z, -138.0, -125.0, -114.0, c);
+    } else if (isEco()) {
+        c = road(p, vec2(cx, yS - 14.0), c);
+    } else {
+        vec2 e = (p - vec2(cx, yS - 8.0)) / vec2(240.0, 20.0);
+        vec2 w = (p - vec2(cx, yS - 40.0)) / vec2(300.0, 70.0);
+        c = over(vec4(vec3(0.42, 0.60, 0.95), (0.30 * exp(-dot(e, e) * 2.0) + 0.07 * exp(-dot(w, w) * 2.0)) * u_val2.y), c);
+    }
+    return c;
+}
+
+void main() {
+    vec2 p = v_uv * u_size;
+    vec4 c = vec4(0.0, 0.0, 0.0, 1.0);      // opaque: BMW's own gauges stay hidden
+    c = centre(p, c);
+    c = side(p, u_fuelG, false, c);
+    c = side(p, u_oilG, true, c);
+    c = speedo(p, c);
+    c = revs(p, c);
+    gl_FragColor = vec4(c.rgb, 1.0);
+}
+`;
+
+const F30NEEDLES = `// The F30 needles (GLSL ES 1.00), a layer above f30dash and its numbers. The speed and rev needles start at the
+// centre cap's edge (BMW's gear box hides the rev counter's middle); the fuel and oil needles turn on a small hub.
+// Comfort: red with a white core. Sport: a short white blade at the end of the lit sweep. Eco Pro: ice blue, and
+// the rev counter's needle shows power (0 at 12 o'clock). They fade in at the end of the intro.
+` + F30_COMMON + `
+vec4 needle(vec2 q, float a, float r0, float r1, float hw0, float hw1, vec3 body, vec3 core, vec3 glow, float show, vec4 c) {
+    vec2 d = dirA(a);
+    float al = dot(q, d), sd = dot(q, vec2(-d.y, d.x));
+    if (al < r0 - 10.0 || al > r1 + 10.0 || abs(sd) > hw0 + 12.0) return c;
+    float hw = mix(hw0, hw1, clamp((al - r0) / (r1 - r0), 0.0, 1.0));
+    float dist = max(abs(sd) - hw, max(r0 - al, al - r1));
+    c = over(vec4(glow, 0.35 * exp(-max(dist, 0.0) / 3.0) * show), c);
+    vec3 col = mix(body, core, cov(abs(sd) - max(hw * 0.3, 0.45)));
+    return over(vec4(col, cov(dist) * show), c);
+}
+
+vec4 hub(vec2 q, vec4 c) {
+    float r = length(q);
+    c = over(vec4(0.0, 0.0, 0.0, cov(r - 6.5)), c);
+    return over(vec4(vec3(0.40, 0.43, 0.47), cov(abs(r - 6.5) - 0.7)), c);
+}
+
+void main() {
+    vec2 p = v_uv * u_size;
+    vec4 c = vec4(0.0);
+    float show = smoothstep(0.6, 1.0, u_val2.y);
+    vec3 body = isSport() ? vec3(0.98, 0.98, 1.0) : isEco() ? vec3(0.55, 0.80, 1.0) : vec3(0.82, 0.16, 0.21);
+    vec3 glow = isSport() ? vec3(0.85, 0.27, 0.03) : isEco() ? vec3(0.25, 0.55, 1.0) : vec3(0.85, 0.15, 0.20);
+    vec3 sideCol = isSport() ? vec3(0.86, 0.29, 0.04) : vec3(0.90, 0.92, 0.95);
+
+    vec2 fq = p - u_fuelG.xy;
+    if (length(fq) < u_fuelG.z) {
+        c = needle(fq, -210.0 + 200.0 * clamp(u_val.z, 0.0, 1.0), -10.0, u_fuelG.z * 0.78, 1.8, 0.9, sideCol, sideCol, sideCol * 0.6, show, c);
+        c = hub(fq, c);
+    }
+    vec2 oq = p - u_oilG.xy;
+    if (length(oq) < u_oilG.z) {
+        c = needle(oq, 210.0 - 200.0 * clamp(u_val.w, 0.0, 1.0), -10.0, u_oilG.z * 0.78, 1.8, 0.9, sideCol, sideCol, sideCol * 0.6, show, c);
+        c = hub(oq, c);
+    }
+    // Sport: a short blade on the sweep's band; otherwise from the cap's edge to the ticks' outer end
+    float r0S = isSport() ? u_spd.z * 0.56 : u_cap + 4.0, r1S = u_spd.z * (isSport() ? 0.875 : 0.862);
+    float hw0 = isSport() ? 2.6 : 3.2, hw1 = isSport() ? 1.4 : 1.3;
+    vec2 sq = p - u_spd.xy;
+    if (length(sq) < u_spd.z) c = needle(sq, SPD0 + SPDW * clamp(u_val.x, 0.0, 1.0), r0S, r1S, hw0, hw1, body, vec3(1.0), glow, show, c);
+    vec2 tq = p - u_tach.xy;
+    if (length(tq) < u_tach.z) {
+        float ta = isEco() ? POWW * clamp(u_val2.x, 0.0, 1.0) : u_val.y < 0.0 ? OFFA : TACH0 + TACHW * clamp(u_val.y, 0.0, 1.0);
+        float r0T = isSport() ? u_tach.z * 0.56 : u_cap + 4.0, r1T = u_tach.z * (isSport() ? 0.875 : 0.862);
+        c = needle(tq, ta, r0T, r1T, hw0, hw1, body, vec3(1.0), glow, show, c);
+    }
+    gl_FragColor = c;
+}
+`;
+
+// The parts FADASH and FANEEDLES share: geometry uniforms, the scales' angles and small helpers.
+const FA_COMMON = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 v_uv;
+uniform vec2 u_size;
+uniform vec3 u_spd;       // speedometer: centre x, y and ring radius (target px)
+uniform vec3 u_tach;      // rev counter, centred on BMW's gear box
+uniform vec3 u_fuelG;     // fuel gauge, left of the speedometer
+uniform vec3 u_oilG;      // oil temperature gauge, right of the rev counter
+uniform float u_cap;      // the black hub cap's radius; BMW's gear box hides inside the rev counter's
+uniform vec4 u_val;       // speed 0..1 of the scale, rpm 0..1 of 7500 (< 0: no data), fuel 0..1, oil 0..1 (70..170 C)
+uniform vec2 u_val2;      // x: the start-up needle sweep 0..1 (1: done); y unused
+
+const float D2R = 0.0174532925;
+const float A0 = -125.0;     // both big scales: 0 at about 8 o'clock, clockwise ...
+const float AW = 250.0;      // ... over the top to about 4 o'clock (speed 0..top, revs 0..7500)
+const float S0 = -60.0;      // the small gauges: empty / 70 C at 10 o'clock ...
+const float SW = 120.0;      // ... to full / 170 C at 2 o'clock
+
+float cov(float d) { return clamp(0.5 - d, 0.0, 1.0); }
+vec4 over(vec4 top, vec4 under) {
+    float a = top.a + under.a * (1.0 - top.a);
+    if (a <= 0.0) return vec4(0.0);
+    return vec4((top.rgb * top.a + under.rgb * under.a * (1.0 - top.a)) / a, a);
+}
+float angOf(vec2 q) { return atan(q.x, -q.y) / D2R; }      // clockwise degrees from 12 o'clock, -180..180
+vec2 dirA(float a) { return vec2(sin(a * D2R), -cos(a * D2R)); }
+`;
+
+const FADASH = `// The F-series analogue instrument cluster (F10 / F01 / F15 / F25, 2009-2018) in one cluster-render "effect"
+// layer (GLSL ES 1.00), after BMW's own drawing of the F10's analogue cluster with the 6WA strip and a 2014 X5
+// photo (kept privately, not in this repo), lit in BMW orange as the clusters are at night: four round instruments
+// in closed orange rings, the big ones with a dark grey scale band and orange ticks, the rev counter's hatched run-up and red block, the speedometer's range bar,
+// and the strip between them with orange hairlines over an orange perspective floor.
+// BMW's gear box (x 1406..1597, y 342..419) is solid black over us: the rev counter is centred on it and both big
+// dials get a black hub cap (u_cap) the box hides inside; the needles (faneedles) start at its edge.
+// Large areas stay pure black (the car brightens dark tints, hud_themes.js). Numbers and words are text widgets
+// above this layer (design/gen_fa_layout.py).
+` + FA_COMMON + `
+uniform vec4 u_scale;     // the speed scale in the display unit: top, label step, tick step, unused
+uniform float u_red;      // where the red block starts, 0..1 of the rev scale
+
+const vec3 LIT = vec3(0.92, 0.30, 0.03);      // the marks: BMW's orange instrument lighting (hud_themes.js fa: dim)
+const vec3 BAND = vec3(0.14, 0.13, 0.125);
+const vec3 RED = vec3(0.86, 0.04, 0.06);
+const vec3 ORANGE = vec3(0.84, 0.235, 0.0);   // the strip and the range bar, in the deep E-series orange
+
+// a radial tick at angle a from radius r0 to r1, half width hw
+float tickD(vec2 q, float a, float r0, float r1, float hw) {
+    vec2 d = dirA(a);
+    float al = dot(q, d);
+    return max(abs(dot(q, vec2(-d.y, d.x))) - hw, max(r0 - al, al - r1));
+}
+// a band on the circle rc (half width hw) from angle a0 to a1, for a pixel at radius r and angle a (same frame)
+float arcD(float r, float a, float rc, float hw, float a0, float a1) {
+    return max(abs(r - rc) - hw, max(a0 - a, a - a1) * D2R * r);
+}
+float segD(vec2 p, vec2 a, vec2 b) { vec2 ba = b - a; return length(p - (a + ba * clamp(dot(p - a, ba) / dot(ba, ba), 0.0, 1.0))); }
+
+// the closed ring round every instrument, lit more softly than the marks and a touch darker at the bottom
+vec4 ring(vec2 q, float r, float rc, float hw, vec4 c) {
+    float top = 0.5 - 0.5 * q.y / max(r, 1.0);
+    return over(vec4(LIT * mix(0.55, 0.8, top), cov(abs(r - rc) - hw)), c);
+}
+
+// the speed scale: a white tick every step (10 km/h or 5 mph) across the band
+vec4 speedMarks(vec2 q, float r, float a, float rIn, float rOut, vec4 c) {
+    if (r < rIn - 2.0 || r > rOut + 2.0 || a < A0 - 3.0 || a > A0 + AW + 3.0) return c;
+    float top = u_scale.x, st = u_scale.z;
+    float tv = clamp(floor((a - A0) / AW * top / st + 0.5) * st, 0.0, top);
+    return over(vec4(LIT, cov(tickD(q, A0 + AW * tv / top, rIn + 4.0, rOut - 3.0, 2.3))), c);
+}
+
+// the rev scale: a white tick every 500 rpm up to the red block, fine hatching over the 400 rpm before it
+vec4 revMarks(vec2 q, float r, float a, float rIn, float rOut, vec4 c) {
+    if (r < rIn - 2.0 || r > rOut + 2.0 || a < A0 - 3.0 || a > A0 + AW + 3.0) return c;
+    float red = A0 + AW * u_red;
+    c = over(vec4(RED, cov(arcD(r, a, 0.5 * (rIn + rOut), 0.5 * (rOut - rIn) - 2.5, red + 0.8, A0 + AW))), c);
+    float ta = A0 + AW * clamp(floor((a - A0) / AW * 15.0 + 0.5), 0.0, 15.0) / 15.0;
+    if (ta < red - 0.5) c = over(vec4(LIT, cov(tickD(q, ta, rIn + 4.0, rOut - 3.0, 2.3))), c);
+    float stepH = AW * 50.0 / 7500.0, h0 = red - 8.0 * stepH;
+    float kh = floor((a - h0) / stepH + 0.5), th = h0 + kh * stepH;
+    if (kh >= 1.0 && th < red - 0.5) c = over(vec4(LIT * 0.9, cov(tickD(q, th, rIn + 11.0, rOut - 3.0, 0.8))), c);
+    return c;
+}
+
+// the speedometer's range bar along its bottom: a white line with five ticks, the bar lit from the left (0) as
+// far as the tank is full, the rest dim and broken into eighths
+vec4 rangeArc(vec2 q, float r, float R, vec4 c) {
+    float a = angOf(q);
+    if (a < 0.0) a += 360.0;                 // the bottom: 146 (right, full) .. 214 (left, empty)
+    if (a < 140.0 || a > 220.0 || r < R * 0.84 || r > R * 0.97) return c;
+    float rl = R * 0.94, rb = R * 0.895;
+    c = over(vec4(LIT * 0.85, cov(arcD(r, a, rl, 1.0, 146.0, 214.0))), c);
+    float k = clamp(floor((214.0 - a) / 17.0 + 0.5), 0.0, 4.0);
+    c = over(vec4(LIT * 0.85, cov(tickD(q, 214.0 - 17.0 * k, rl - 6.0, rl + 1.0, 1.0))), c);
+    float f = clamp(u_val.z, 0.0, 1.0);
+    bool lit = a >= 214.0 - 68.0 * f;
+    float gap = lit ? 1.0 : step(0.1, fract((214.0 - a) / 8.5));
+    return over(vec4(lit ? ORANGE : ORANGE * 0.3, gap * cov(arcD(r, a, rb, 4.5, 146.0, 214.0))), c);
+}
+
+// a big dial: the scale band, its marks, the ring, the black hub cap
+vec4 bigDial(vec2 p, vec3 g, bool tach, vec4 c) {
+    vec2 q = p - g.xy;
+    float R = g.z, r = length(q);
+    if (r > R + 3.0) return c;
+    float a = angOf(q), rIn = R * 0.87, rOut = R * 0.975;
+    c = over(vec4(BAND, cov(arcD(r, a, 0.5 * (rIn + rOut), 0.5 * (rOut - rIn), A0, A0 + AW))), c);
+    if (tach) c = revMarks(q, r, a, rIn, rOut, c);
+    else {
+        c = speedMarks(q, r, a, rIn, rOut, c);
+        c = rangeArc(q, r, R, c);
+    }
+    c = ring(q, r, R - 2.5, 1.8, c);
+    c = over(vec4(0.0, 0.0, 0.0, cov(r - u_cap)), c);
+    return over(vec4(vec3(0.15, 0.155, 0.165), cov(abs(r - u_cap) - 0.9)), c);
+}
+
+// a small gauge: ticks at 0, 1/4, 1/2, 3/4, 1 (the ends and middle longer) across its top, and its ring
+vec4 side(vec2 p, vec3 g, vec4 c) {
+    vec2 q = p - g.xy;
+    float R = g.z, r = length(q);
+    if (r > R + 3.0) return c;
+    float k = clamp(floor((angOf(q) - S0) / 30.0 + 0.5), 0.0, 4.0);
+    bool maj = mod(k, 2.0) < 0.5;
+    c = over(vec4(LIT, cov(tickD(q, S0 + 30.0 * k, R * (maj ? 0.64 : 0.71), R * 0.86, maj ? 1.9 : 1.3))), c);
+    return ring(q, r, R - 2.0, 1.4, c);
+}
+
+// the gear's white frame at the bottom of the rev counter (its letter is a text widget)
+vec4 gearFrame(vec2 p, vec4 c) {
+    vec2 d = abs(p - (u_tach.xy + vec2(0.0, u_tach.z * 0.62))) - vec2(36.0, 24.0);
+    float box = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+    return over(vec4(LIT * 0.85, cov(abs(box) - 1.1)), c);
+}
+
+// between the dials: an orange floor in perspective fading up to the readouts, and the three orange hairlines
+// the Time / Range / Temp captions sit on (design/gen_fa_layout.py puts the text at the same x)
+vec4 strip(vec2 p, vec4 c) {
+    float cx = 0.5 * (u_spd.x + u_tach.x), y = u_spd.y + 225.0;
+    float vy = y - 40.0, t = p.y - vy;
+    if (t > 0.0 && abs(p.x - cx) < 320.0) {
+        float u = (p.x - cx) / t;
+        float dr = abs(fract(u / 0.28 + 0.5) - 0.5) * 0.28 * t;
+        float n = 600.0 / t;
+        float dh = abs(n - floor(n + 0.5)) * t * t / 600.0;
+        float fade = smoothstep(y + 8.0, y + 50.0, p.y) * (1.0 - smoothstep(240.0, 320.0, abs(p.x - cx)));
+        c = over(vec4(ORANGE * 0.8, 0.75 * fade * cov(min(dr, dh) - 0.45)), c);
+    }
+    float d = min(segD(p, vec2(cx - 250.0, y), vec2(cx - 110.0, y)), min(segD(p, vec2(cx - 70.0, y), vec2(cx + 70.0, y)),
+        segD(p, vec2(cx + 110.0, y), vec2(cx + 250.0, y))));
+    return over(vec4(ORANGE, cov(d - 0.8)), c);
+}
+
+void main() {
+    vec2 p = v_uv * u_size;
+    vec4 c = vec4(0.0, 0.0, 0.0, 1.0);      // opaque: BMW's own gauges stay hidden
+    c = strip(p, c);
+    c = side(p, u_fuelG, c);
+    c = side(p, u_oilG, c);
+    c = bigDial(p, u_spd, false, c);
+    c = bigDial(p, u_tach, true, c);
+    c = gearFrame(p, c);
+    gl_FragColor = vec4(c.rgb, 1.0);
+}
+`;
+
+const FANEEDLES = `// The F-series analogue needles (GLSL ES 1.00), a layer above fadash and its numbers: red-orange, tapering, the big
+// ones from the hub cap's edge (BMW's gear box hides the rev counter's middle), the small ones through a grey hub.
+// After every rebuild they sweep to the end of the scale and back (u_val2.x), as BMW's own do at start-up.
+` + FA_COMMON + `
+float sweep() { float t = u_val2.x; return t < 0.45 ? smoothstep(0.0, 0.45, t) : 1.0 - smoothstep(0.55, 1.0, t); }
+float shown(float live) { return mix(sweep(), clamp(live, 0.0, 1.0), smoothstep(0.8, 1.0, clamp(u_val2.x, 0.0, 1.0))); }
+
+vec4 needle(vec2 q, float a, float r0, float r1, float hw0, float hw1, vec4 c) {
+    vec2 d = dirA(a);
+    float al = dot(q, d), sd = dot(q, vec2(-d.y, d.x));
+    if (al < r0 - 4.0 || al > r1 + 4.0 || abs(sd) > hw0 + 4.0) return c;
+    float hw = mix(hw0, hw1, clamp((al - r0) / (r1 - r0), 0.0, 1.0));
+    float dist = max(abs(sd) - hw, max(r0 - al, al - r1));
+    vec3 col = mix(vec3(0.90, 0.20, 0.03), vec3(1.0, 0.42, 0.12), cov(abs(sd) - hw * 0.45));
+    return over(vec4(col, cov(dist)), c);
+}
+
+vec4 hub(vec2 q, float rh, vec4 c) {
+    vec3 col = mix(vec3(0.32, 0.33, 0.35), vec3(0.12, 0.12, 0.13), clamp((q.y + rh) / (2.0 * rh), 0.0, 1.0));
+    return over(vec4(col, cov(length(q) - rh)), c);
+}
+
+void main() {
+    vec2 p = v_uv * u_size;
+    vec4 c = vec4(0.0);
+    vec2 fq = p - u_fuelG.xy;
+    if (length(fq) < u_fuelG.z) {
+        c = needle(fq, S0 + SW * shown(u_val.z), -u_fuelG.z * 0.18, u_fuelG.z * 0.8, 2.2, 1.1, c);
+        c = hub(fq, u_fuelG.z * 0.15, c);
+    }
+    vec2 oq = p - u_oilG.xy;
+    if (length(oq) < u_oilG.z) {
+        c = needle(oq, S0 + SW * shown(u_val.w), -u_oilG.z * 0.18, u_oilG.z * 0.8, 2.2, 1.1, c);
+        c = hub(oq, u_oilG.z * 0.15, c);
+    }
+    vec2 sq = p - u_spd.xy;
+    if (length(sq) < u_spd.z) c = needle(sq, A0 + AW * shown(u_val.x), u_cap + 3.0, u_spd.z * 0.85, 3.6, 1.6, c);
+    vec2 tq = p - u_tach.xy;
+    if (length(tq) < u_tach.z) c = needle(tq, A0 + AW * shown(max(u_val.y, 0.0)), u_cap + 3.0, u_tach.z * 0.85, 3.6, 1.6, c);
+    gl_FragColor = c;
+}
+`;
+
+module.exports = { shiftbar: SHIFTBAR, arc: ARC, revbar: REVBAR, lights: LIGHTS, fill: FILL, box: BOX, grid: GRID, segbar: SEGBAR, mdash: MDASH, mtach: MTACH, sdash: SDASH, e39dash: E39DASH, e39needles: E39NEEDLES, f30dash: F30DASH, f30needles: F30NEEDLES, fadash: FADASH, faneedles: FANEEDLES, boxes: BOXES, atext: ATEXT };
